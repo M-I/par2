@@ -6,6 +6,6 @@ EUNIT_OPTS = verbose
 
 EDOC_OPTS = {dir, docs}
 
-docs:: edoc
-
 include erlang.mk
+
+docs:: edoc
