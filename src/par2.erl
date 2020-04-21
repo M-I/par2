@@ -94,7 +94,7 @@ repair(Filename) ->
 %%--------------------------------------------------------------------
 -spec verify(Filename :: string()) -> ok | repairable | {error, unrepairable} | {error, Error :: string()}.
 verify(Filename) ->
-    gen_server:call(?SERVER, {repair, Filename}, infinity).
+    gen_server:call(?SERVER, {verify, Filename}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -247,7 +247,7 @@ do_create(Filename, Size) when Size/100*5 < 10 * 128 * 1024 ->
 			  filename:flatten([Filename,".par2"]),
 			  Filename]}),
     collect_response(Port);
-do_create(Filename, Size) when Size/100*5 < 10 * 128 * 1024 ->
+do_create(Filename, _Size) ->
     Port = do_par2({args,["create",
 			  "-q",
 			  "-c10",
@@ -382,11 +382,14 @@ collect_response_test() ->
 		   {collected, Sth} -> Sth
 	       end.
 
-do_par2_setup() ->
+delete_md5_par2() ->
     [file:delete(X) || X <- filelib:wildcard("test/md5.gif.*")].
 
+delete_txt_par2() ->
+        [file:delete(X) || X <- filelib:wildcard("test/txt.rtf.*")].
+
 test_do_par2_create_test() ->
-    do_par2_setup(),
+    delete_md5_par2(),
     Port = do_par2({args, ["create", "-q", "-b100", "-r1", "-n1", "test/md5.gif"]}),
     ?assertEqual(ok, collect_response(Port)).
 
@@ -396,7 +399,7 @@ test_do_par2_eexist_test() ->
     ?assertEqual(true, lists:suffix("File already exists.", Reason)).
 
 test_do_par2_ENOENT_test() ->
-    Port = do_par2({args, ["create", "-q", "-b100", "-r1", "-n1", "test/nononononononon"]}),
+    Port = do_par2({args, ["create", "-q", "-b100", "-r1", "-n1", "test/nononononon"]}),
     ?assertEqual({error, "You must specify a list of files when creating."},
 		 collect_response(Port)).
 
@@ -408,8 +411,8 @@ do_verify1_test() ->
     Filename = "test/wrong.md5.gif.par2",
     ?assertEqual(repairable, do_verify(Filename)).
 
-
 do_verify_fail0_test() ->
+    delete_txt_par2(),
     Filename = "test/txt.rtf",
     ?assertEqual({error, "You must specify a Recovery file."}, do_verify(Filename)).
 
@@ -427,12 +430,14 @@ parse_par2_test() ->
 
 app_test() ->
     application:stop(par2),
-    [file:delete(X) || X <- filelib:wildcard("test/txt.rtf.*")],
     Filename = "test/txt.rtf",
+    Broken = "test/wrong.md5.gif",
     ok = application:start(par2),
-    ok = par2:create(Filename),
-    {error, "Could not create " ++ _Rest} = par2:create(Filename),
-    ok = par2:verify(Filename),
+    ?assertEqual(ok, par2:create(Filename)),
+    ?assertNotEqual(ok, par2:create(Filename)),
+    ?assertEqual(repairable, par2:verify(Broken)),
+    %% check against bug in f882da9 where handle_call would run do_repair/1 in lieu of do_verify/1
+    ?assertEqual(repairable, par2:verify(Broken)),
     application:stop(par2),
     [file:delete(X) || X <- filelib:wildcard("test/txt.rtf.*")].
 
