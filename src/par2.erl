@@ -56,20 +56,6 @@ stop() ->
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-%% %%--------------------------------------------------------------------
-%% %% @doc
-%% %% Create PAR2 files
-%% %% Opts is a list of strings and/or binaries arguments passed to the par2 cli
-%% %% Refer to Par2's man for more info
-%% %% ex: par2 create -
-%% %% @end
-%% %%--------------------------------------------------------------------
-%% -spec run(Args) -> ok | {error, Error :: string()} when
-%%       Args :: {args, Opts},
-%%       Opts :: list(). 
-%% run(Args) ->
-%%     gen_server:call(?SERVER, {run, Args}, infinity).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Create PAR2 files with default options 
@@ -83,8 +69,8 @@ create(Filename) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Create PAR2 files with predefined options based on expected redundancy size <br/>
-%% - ["-b100", "-r5", "-n1"] when smaller than 1280 KiB  <br/>
-%% - ["-c10", "-s131072", "-n1"] when larger  <br/>
+%%  - ["create", "-b100", "-r5", "-n1"] when smaller than 1280 KiB  <br/>
+%%  - ["create", "-c10", "-s131072", "-n1"] when larger  <br/>
 %% Trying to optimize for small redundancies, especially for KBs files
 %% @end
 %%--------------------------------------------------------------------
@@ -97,7 +83,7 @@ create(Filename, Size) ->
 %% Repair files using PAR2 files
 %% @end
 %%--------------------------------------------------------------------
--spec repair(Filename :: string()) -> ok | repaired | {error, Error :: string()}.
+-spec repair(Filename :: string()) -> ok | repaired | {error, unrepairable} | {error, Error :: string()}.
 repair(Filename) ->
     gen_server:call(?SERVER, {repair, Filename}, infinity).
 
@@ -106,15 +92,16 @@ repair(Filename) ->
 %% Verify files using PAR2 files
 %% @end
 %%--------------------------------------------------------------------
--spec verify(Filename :: string()) -> ok | repaired | {error, Error :: string()}.
+-spec verify(Filename :: string()) -> ok | repairable | {error, unrepairable} | {error, Error :: string()}.
 verify(Filename) ->
     gen_server:call(?SERVER, {repair, Filename}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get the md5sum from the par2 file
+%% Get the md5sum from the PAR2 file <code>Filename</code>
 %% @end
 %%--------------------------------------------------------------------
+-spec get_md5(Filename :: string()) -> binary() | {error, Reason :: string()}.
 get_md5(Filename) ->
     gen_server:call(?SERVER, {get_md5, Filename}, infinity).
     
@@ -353,8 +340,8 @@ collect(Port, Acc) ->
 	{Port,{data, {eol, "Repair is not possible."}}} ->
 	    {error, unrepairable};
 
-	{Port, {data,{eol, "You must specify a list of files when creating."}}} ->
-	    {error, enoent};
+	{Port, {data, {eol, "You must specify a list of files when creating." = String}}} ->
+	    {error, String};
 
 	{Port,{data, {eol,"You must specify a Recovery file." = String}}} ->
 	    {error, String};
@@ -368,7 +355,7 @@ collect(Port, Acc) ->
 	{Port, {data,{eol, String}}} ->
 	    collect(Port, [String|Acc])
     after 0 ->
-	    lists:reverse(Acc)
+	    {error, lists:reverse(Acc)}
     end.
 
 %%%===================================================================
@@ -410,7 +397,8 @@ test_do_par2_eexist_test() ->
 
 test_do_par2_ENOENT_test() ->
     Port = do_par2({args, ["create", "-q", "-b100", "-r1", "-n1", "test/nononononononon"]}),
-    ?assertEqual({error,enoent}, collect_response(Port)).
+    ?assertEqual({error, "You must specify a list of files when creating."},
+		 collect_response(Port)).
 
 do_verify0_test() ->
     Filename = "test/md5.gif.par2",

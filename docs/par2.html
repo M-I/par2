@@ -15,14 +15,15 @@
 <p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
 
 <h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#create-1">create/1</a></td><td>
-  Create PAR2 files
-  Args is a list of strings and/or binaries arguments passed to the par2create cli
-  Refer to Par2's man for more info.</td></tr>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#collect_response-1">collect_response/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#create-1">create/1</a></td><td>
+  Create PAR2 files with default options
+  Similar to <code>par2 create Filename</code></td></tr>
 <tr><td valign="top"><a href="#create-2">create/2</a></td><td>
   Create PAR2 files with predefined options based on expected redundancy size.</td></tr>
+<tr><td valign="top"><a href="#do_par2-1">do_par2/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#get_md5-1">get_md5/1</a></td><td>
-  Get the md5sum from the par2 file.</td></tr>
+  Get the md5sum from the PAR2 file <code>Filename</code></td></tr>
 <tr><td valign="top"><a href="#repair-1">repair/1</a></td><td>
   Repair files using PAR2 files.</td></tr>
 <tr><td valign="top"><a href="#start-0">start/0</a></td><td>
@@ -37,32 +38,41 @@
 
 <h2><a name="functions">Function Details</a></h2>
 
+<h3 class="function"><a name="collect_response-1">collect_response/1</a></h3>
+<div class="spec">
+<p><tt>collect_response(Port) -&gt; any()</tt></p>
+</div>
+
 <h3 class="function"><a name="create-1">create/1</a></h3>
 <div class="spec">
-<p><tt>create(Args::list()) -&gt; ok | {error, Error::string()}</tt><br></p>
+<p><tt>create(Filename::string()) -&gt; ok | {error, Error::string()}</tt><br></p>
 </div><p>
-  Create PAR2 files
-  Args is a list of strings and/or binaries arguments passed to the par2create cli
-  Refer to Par2's man for more info</p>
+  Create PAR2 files with default options
+  Similar to <code>par2 create Filename</code></p>
 
 <h3 class="function"><a name="create-2">create/2</a></h3>
 <div class="spec">
 <p><tt>create(Filename::string(), Size::integer()) -&gt; ok | {error, Error::string()}</tt><br></p>
 </div><p>
   Create PAR2 files with predefined options based on expected redundancy size <br>
-  - ["-b100", "-r5", "-n1"] when smaller than 1280 KiB  <br>
-  - ["-c10", "-s131072", "-n1"] when larger  <br>
+   - ["create", "-b100", "-r5", "-n1"] when smaller than 1280 KiB  <br>
+   - ["create", "-c10", "-s131072", "-n1"] when larger  <br>
   Trying to optimize for small redundancies, especially for KBs files</p>
+
+<h3 class="function"><a name="do_par2-1">do_par2/1</a></h3>
+<div class="spec">
+<p><tt>do_par2(Args) -&gt; any()</tt></p>
+</div>
 
 <h3 class="function"><a name="get_md5-1">get_md5/1</a></h3>
 <div class="spec">
-<p><tt>get_md5(Filename) -&gt; any()</tt></p>
+<p><tt>get_md5(Filename::string()) -&gt; binary() | {error, Reason::string()}</tt><br></p>
 </div><p>
-  Get the md5sum from the par2 file</p>
+  Get the md5sum from the PAR2 file <code>Filename</code></p>
 
 <h3 class="function"><a name="repair-1">repair/1</a></h3>
 <div class="spec">
-<p><tt>repair(Filename::string()) -&gt; ok | repaired | {error, Error::string()}</tt><br></p>
+<p><tt>repair(Filename::string()) -&gt; ok | repaired | {error, unrepairable} | {error, Error::string()}</tt><br></p>
 </div><p>
   Repair files using PAR2 files</p>
 
@@ -86,7 +96,7 @@
 
 <h3 class="function"><a name="verify-1">verify/1</a></h3>
 <div class="spec">
-<p><tt>verify(Filename::string()) -&gt; ok | repaired | {error, Error::string()}</tt><br></p>
+<p><tt>verify(Filename::string()) -&gt; ok | repairable | {error, unrepairable} | {error, Error::string()}</tt><br></p>
 </div><p>
   Verify files using PAR2 files</p>
 <hr>
