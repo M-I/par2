@@ -8,13 +8,16 @@ erl_crash.dump
 # rebar 2.x
 .rebar
 rel/example_project
-ebin/*.beam
+ebin
 deps
 
 # rebar 3
 .rebar3
 _build/
 _checkouts/
+
+# erlang.mk
+.erlang.mk
 
 # Created by https://www.gitignore.io/api/macos
 # Edit at https://www.gitignore.io/?templates=macos

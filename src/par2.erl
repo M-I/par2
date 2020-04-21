@@ -6,6 +6,9 @@
 -export([start_link/0, start/0, stop/0]).
 -export([create/1, create/2, repair/1, verify/1, get_md5/1]).
 
+%%test only
+-export([do_par2/1, collect_response/1]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3, format_status/2]).
@@ -53,16 +56,29 @@ stop() ->
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%% %%--------------------------------------------------------------------
+%% %% @doc
+%% %% Create PAR2 files
+%% %% Opts is a list of strings and/or binaries arguments passed to the par2 cli
+%% %% Refer to Par2's man for more info
+%% %% ex: par2 create -
+%% %% @end
+%% %%--------------------------------------------------------------------
+%% -spec run(Args) -> ok | {error, Error :: string()} when
+%%       Args :: {args, Opts},
+%%       Opts :: list(). 
+%% run(Args) ->
+%%     gen_server:call(?SERVER, {run, Args}, infinity).
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Create PAR2 files
-%% Args is a list of strings and/or binaries arguments passed to the par2create cli
-%% Refer to Par2's man for more info
+%% Create PAR2 files with default options 
+%% Similar to <code>par2 create Filename</code>
 %% @end
 %%--------------------------------------------------------------------
--spec create(Args :: list()) -> ok | {error, Error :: string()}.
-create(Args) ->
-    gen_server:call(?SERVER, {create, Args}).
+-spec create(Filename :: string()) -> ok | {error, Error :: string()}.
+create(Filename) ->
+    gen_server:call(?SERVER, {create, Filename}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -74,7 +90,7 @@ create(Args) ->
 %%--------------------------------------------------------------------
 -spec create(Filename :: string(), Size :: integer()) -> ok | {error, Error :: string()}.
 create(Filename, Size) ->
-    gen_server:call(?SERVER, {create, Filename, Size}).
+    gen_server:call(?SERVER, {create, Filename, Size}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,7 +99,7 @@ create(Filename, Size) ->
 %%--------------------------------------------------------------------
 -spec repair(Filename :: string()) -> ok | repaired | {error, Error :: string()}.
 repair(Filename) ->
-    gen_server:call(?SERVER, {repair, Filename}).
+    gen_server:call(?SERVER, {repair, Filename}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -92,7 +108,7 @@ repair(Filename) ->
 %%--------------------------------------------------------------------
 -spec verify(Filename :: string()) -> ok | repaired | {error, Error :: string()}.
 verify(Filename) ->
-    gen_server:call(?SERVER, {repair, Filename}).
+    gen_server:call(?SERVER, {repair, Filename}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,7 +116,7 @@ verify(Filename) ->
 %% @end
 %%--------------------------------------------------------------------
 get_md5(Filename) ->
-    gen_server:call(?SERVER, {get_md5, Filename}).
+    gen_server:call(?SERVER, {get_md5, Filename}, infinity).
     
 %%%===================================================================
 %%% gen_server callbacks
@@ -136,6 +152,9 @@ init([]) ->
 			 {noreply, NewState :: term(), hibernate} |
 			 {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
 			 {stop, Reason :: term(), NewState :: term()}.
+handle_call({create, Filename}, _From, State) ->
+    Reply = do_create(Filename),
+    {reply, Reply, State};
 handle_call({create, Filename, Size}, _From, State) ->
     Reply = do_create(Filename, Size),
     {reply, Reply, State};
@@ -219,36 +238,44 @@ format_status(_Opt, Status) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-do_create(Filename, Size) when Size/100*5 < 10 * 128 * 1024 ->
-    do_create({args,["-q",
-		     "-b100",
-		     "-r5",
-		     "-n1",
-		     filename:flatten([Filename,".par2"]),
-		     Filename]});
-do_create(Filename, Size) when Size/100*5 < 10 * 128 * 1024 ->
-    do_create({args,["-q",
-		     "-c10",
-		     "-s131072",
-		     "-n1",
-		     filename:flatten([Filename,".par2"]),
-		     Filename]}).
+do_par2(Args) ->
+    open_port({spawn_executable, os:find_executable("par2")},
+	      [hide, stream, stderr_to_stdout,
+	       stream, {line, 1000000},
+	       Args]).
 
-do_create(Args) ->
-    Port = open_port({spawn_executable, os:find_executable("par2create")},
-		     [hide, stream, stderr_to_stdout,
-		      stream, {line, 1000000},
-		      {args,Args}]),
+do_create(Filename) ->
+   Port = do_par2({args,["create",
+			 "-q",
+			 filename:flatten([Filename,".par2"]),
+			 Filename]}),
+    collect_response(Port).
+
+do_create(Filename, Size) when Size/100*5 < 10 * 128 * 1024 ->
+    Port = do_par2({args,["create", 
+			  "-q",
+			  "-b100",
+			  "-r5",
+			  "-n1",
+			  filename:flatten([Filename,".par2"]),
+			  Filename]}),
+    collect_response(Port);
+do_create(Filename, Size) when Size/100*5 < 10 * 128 * 1024 ->
+    Port = do_par2({args,["create",
+			  "-q",
+			  "-c10",
+			  "-s131072",
+			  "-n1",
+			  filename:flatten([Filename,".par2"]),
+			  Filename]}),
     collect_response(Port).
 
 do_repair(Filename) ->
-    Port = open_port({spawn_executable, os:find_executable("par2")},
-		     [hide, stream, {line, 1000000}, stderr_to_stdout, {args,["repair", "-q", Filename]}]),
+    Port = do_par2({args,["repair", "-q", Filename]}),
     collect_response(Port).
 
 do_verify(Filename) ->
-    Port = open_port({spawn_executable, os:find_executable("par2")},
-		     [hide, stream, {line, 1000000}, stderr_to_stdout, {args,["verify", "-q", Filename]}]),
+    Port = do_par2({args,["verify", "-q", Filename]}),
     collect_response(Port).
 
 do_get_md5({error, _} = Err) ->
@@ -299,10 +326,17 @@ parse_packet(<<_Header:64/binary,
 				%% zero character.
     maps:get(Field, Packet).
 
+collect_response(Port) when is_port(Port) ->
+    MonitorRef = monitor(port, Port),
+    receive
+	{'DOWN', MonitorRef, port, Port, _Info} ->
+	    collect(Port, [])
+    end;
+%% For test
+collect_response(Pid) ->
+    collect(Pid, []).
 
-
-
-collect_response(Port) ->
+collect(Port, Acc) ->
     receive
         {Port,{data, {eol, "Done"}}} ->
             ok;
@@ -317,17 +351,24 @@ collect_response(Port) ->
 	    repairable;
 
 	{Port,{data, {eol, "Repair is not possible."}}} ->
-	    unrepairable;
+	    {error, unrepairable};
 
-        {Port,{data, {eol, String}}} ->
-	    case erlang:port_info(Port, connected) of
-		undefined -> String;
-		{connected, _Pid} -> collect_response(Port)
-	    end
-    %% %% Prevent the gen_server from hanging indefinitely in case the
-    %% %% spawned process is taking too long processing the request.
-    %% after 60*1000 -> 
-    %%         {error, timeout}
+	{Port, {data,{eol, "You must specify a list of files when creating."}}} ->
+	    {error, enoent};
+
+	{Port,{data, {eol,"You must specify a Recovery file." = String}}} ->
+	    {error, String};
+
+	{Port,{data, {eol, "failed to set the main par file" = String}}} ->
+	    {error, String};
+
+	{Port, {data,{eol, "Could not create " ++ _Rest = String}}} ->
+	    {error, String};
+
+	{Port, {data,{eol, String}}} ->
+	    collect(Port, [String|Acc])
+    after 0 ->
+	    lists:reverse(Acc)
     end.
 
 %%%===================================================================
@@ -337,17 +378,56 @@ collect_response(Port) ->
 
 -include_lib("eunit/include/eunit.hrl").
 
-do_create_test() ->
-    [file:delete(X) || X <- filelib:wildcard("test/md5.gif.*")],
-    ok = do_create([ "-q",
-		     "-b100",
-		     "-r1",
-		     "-n1",
-		     "test/md5.gif"]).
+collect_test() ->
+    self() ! {self(),{data, {eol, []}}},
+    self() ! {self(),{data, {eol, "Done"}}},
+    ?assertEqual(ok, collect_response(self())).
 
-do_verify_test() ->
+collect_response_test() ->
+    Self = self(),
+    Pid = spawn_link(fun() ->
+			     Self ! {collected, collect_response(Self)}
+                     end),
+    Pid ! {owner, someSelf},
+    Pid ! {owner, Self},
+    Pid ! {Self,{data, {eol, "Repair complete."}}},
+    repaired = receive
+		   {collected, Sth} -> Sth
+	       end.
+
+do_par2_setup() ->
+    [file:delete(X) || X <- filelib:wildcard("test/md5.gif.*")].
+
+test_do_par2_create_test() ->
+    do_par2_setup(),
+    Port = do_par2({args, ["create", "-q", "-b100", "-r1", "-n1", "test/md5.gif"]}),
+    ?assertEqual(ok, collect_response(Port)).
+
+test_do_par2_eexist_test() ->
+    Port = do_par2({args, ["create", "-q", "-b100", "-r1", "-n1", "test/md5.gif"]}),
+    {error, Reason} = collect_response(Port),
+    ?assertEqual(true, lists:suffix("File already exists.", Reason)).
+
+test_do_par2_ENOENT_test() ->
+    Port = do_par2({args, ["create", "-q", "-b100", "-r1", "-n1", "test/nononononononon"]}),
+    ?assertEqual({error,enoent}, collect_response(Port)).
+
+do_verify0_test() ->
     Filename = "test/md5.gif.par2",
-    ok = do_verify(Filename).
+    ?assertEqual(ok, do_verify(Filename)).
+
+do_verify1_test() ->
+    Filename = "test/wrong.md5.gif.par2",
+    ?assertEqual(repairable, do_verify(Filename)).
+
+
+do_verify_fail0_test() ->
+    Filename = "test/txt.rtf",
+    ?assertEqual({error, "You must specify a Recovery file."}, do_verify(Filename)).
+
+do_verify_fail1_test() ->
+    Filename = "test/md5",
+    ?assertEqual({error, "failed to set the main par file"}, do_verify(Filename)).
 
 parse_par2_test() ->
     Filename = "test/md5.gif",
@@ -355,6 +435,17 @@ parse_par2_test() ->
     {ok, Par2_Data} = file:read_file(Filename++".par2"),
     <<Data_MD5:16/binary>> = crypto:hash(md5, Data),
     <<Par2_Data_MD5:16/binary>> = parse_par2(Par2_Data, <<?FILEDESCRIPTION>>, hashfull),
-    true = Data_MD5 == Par2_Data_MD5.
+    ?assertEqual(Data_MD5, Par2_Data_MD5).
+
+app_test() ->
+    application:stop(par2),
+    [file:delete(X) || X <- filelib:wildcard("test/txt.rtf.*")],
+    Filename = "test/txt.rtf",
+    ok = application:start(par2),
+    ok = par2:create(Filename),
+    {error, "Could not create " ++ _Rest} = par2:create(Filename),
+    ok = par2:verify(Filename),
+    application:stop(par2),
+    [file:delete(X) || X <- filelib:wildcard("test/txt.rtf.*")].
 
 -endif.
